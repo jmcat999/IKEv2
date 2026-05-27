@@ -4,9 +4,9 @@ connections {
         local_addrs = %any
         remote_addrs = %any
 
-        # Android/Windows clients behind mobile NAT may drop large IKE_AUTH fragments.
-        # Only send the server certificate if the client asks for it, and do not send certificate requests.
-        send_cert = ifasked
+        # Android/Windows IKEv2 EAP clients must be able to validate the server certificate.
+        # Send the server certificate unconditionally, but do not send certificate requests to clients.
+        send_cert = always
         send_certreq = no
         encap = yes
         fragmentation = yes
