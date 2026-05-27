@@ -4,15 +4,15 @@ connections {
         local_addrs = %any
         remote_addrs = %any
 
-        send_cert = ifasked
+        send_cert = always
         encap = yes
         fragmentation = yes
-        mobike = no
+        mobike = yes
         unique = never
 
         pools = vpn-pool
 
-        proposals = aes256-sha256-modp2048,aes128-sha256-modp2048,aes256-sha1-modp2048,aes128-sha1-modp2048
+        proposals = aes256-sha256-modp4096,aes256-sha256-modp2048,aes128-sha256-modp2048,aes256-sha1-modp2048,aes128-sha1-modp2048
 
         local {
             auth = pubkey
