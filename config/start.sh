@@ -1,6 +1,30 @@
 #!/bin/bash
 set -e
 
+VPN_MODE="${VPN_MODE:-nat}"
+VPN_DOMAIN="${VPN_DOMAIN:?缺少 VPN_DOMAIN}"
+VPN_USER="${VPN_USER:?缺少 VPN_USER}"
+VPN_PASSWORD="${VPN_PASSWORD:?缺少 VPN_PASSWORD}"
+VPN_POOL="${VPN_POOL:?缺少 VPN_POOL}"
+VPN_DNS1="${VPN_DNS1:-1.1.1.1}"
+VPN_DNS2="${VPN_DNS2:-8.8.8.8}"
+LAN_SUBNET="${LAN_SUBNET:-192.168.0.0/24}"
+
+case "$VPN_MODE" in
+    nat)
+        VPN_LOCAL_TS="${VPN_LOCAL_TS:-0.0.0.0/0}"
+        ;;
+    proxyarp)
+        VPN_LOCAL_TS="${VPN_LOCAL_TS:-$LAN_SUBNET}"
+        ;;
+    *)
+        echo "错误: 不支持的 VPN_MODE=$VPN_MODE，只能是 nat 或 proxyarp"
+        exit 1
+        ;;
+esac
+
+export VPN_MODE VPN_DOMAIN VPN_USER VPN_PASSWORD VPN_POOL VPN_DNS1 VPN_DNS2 LAN_SUBNET VPN_LOCAL_TS
+
 modprobe xfrm_user || true
 modprobe xfrm_interface || true
 modprobe esp4 || true
@@ -29,14 +53,33 @@ if [ ! -s /etc/swanctl/x509/cert.pem ]; then
     exit 1
 fi
 
+echo "运行模式: $VPN_MODE"
+echo "VPN_POOL: $VPN_POOL"
+echo "VPN_LOCAL_TS: $VPN_LOCAL_TS"
+if [ "$VPN_MODE" = "proxyarp" ]; then
+    echo "LAN_SUBNET: $LAN_SUBNET"
+fi
+
 echo "证书链数量: $(grep -c 'BEGIN CERTIFICATE' /certs/cert.pem || true)"
 echo "服务器证书信息:"
 openssl x509 -in /etc/swanctl/x509/cert.pem -noout -subject -issuer -dates -ext subjectAltName -ext extendedKeyUsage || true
 
-envsubst < /etc/swanctl/swanctl.conf.template > /etc/swanctl/swanctl.conf
+MODE_TEMPLATE="/etc/cat66-ikev2/modes/$VPN_MODE/swanctl.conf.template"
+LEGACY_TEMPLATE="/etc/swanctl/swanctl.conf.template"
+
+if [ -f "$MODE_TEMPLATE" ]; then
+    echo "使用模式配置: $MODE_TEMPLATE"
+    envsubst < "$MODE_TEMPLATE" > /etc/swanctl/swanctl.conf
+elif [ -f "$LEGACY_TEMPLATE" ]; then
+    echo "警告: 未找到 $MODE_TEMPLATE，回退到旧模板 $LEGACY_TEMPLATE"
+    envsubst < "$LEGACY_TEMPLATE" > /etc/swanctl/swanctl.conf
+else
+    echo "错误: 找不到 swanctl 配置模板"
+    exit 1
+fi
 
 echo "关键 swanctl 配置:"
-grep -E 'send_cert|send_certreq|mobike|fragmentation|proposals|eap_id' /etc/swanctl/swanctl.conf || true
+grep -E 'send_cert|send_certreq|mobike|fragmentation|proposals|eap_id|local_ts' /etc/swanctl/swanctl.conf || true
 
 sysctl -w net.ipv4.ip_forward=1 || true
 
@@ -52,7 +95,17 @@ echo "公网网卡: $PUBLIC_IFACE"
 
 iptables -C FORWARD -s "$VPN_POOL" -j ACCEPT 2>/dev/null || iptables -A FORWARD -s "$VPN_POOL" -j ACCEPT
 iptables -C FORWARD -d "$VPN_POOL" -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || iptables -A FORWARD -d "$VPN_POOL" -m state --state ESTABLISHED,RELATED -j ACCEPT
-iptables -t nat -C POSTROUTING -s "$VPN_POOL" -o "$PUBLIC_IFACE" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s "$VPN_POOL" -o "$PUBLIC_IFACE" -j MASQUERADE
+
+if [ "$VPN_MODE" = "nat" ]; then
+    echo "应用 NAT 模式防火墙规则: VPN 客户端通过 $PUBLIC_IFACE 做 MASQUERADE 出口"
+    iptables -t nat -C POSTROUTING -s "$VPN_POOL" -o "$PUBLIC_IFACE" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s "$VPN_POOL" -o "$PUBLIC_IFACE" -j MASQUERADE
+else
+    echo "应用 Proxy ARP 模式防火墙规则: 不做 MASQUERADE，保留 VPN 客户端同网段源 IP"
+    sysctl -w net.ipv4.conf.all.proxy_arp=1 || true
+    sysctl -w "net.ipv4.conf.$PUBLIC_IFACE.proxy_arp=1" || true
+    iptables -C FORWARD -s "$VPN_POOL" -d "$LAN_SUBNET" -j ACCEPT 2>/dev/null || iptables -A FORWARD -s "$VPN_POOL" -d "$LAN_SUBNET" -j ACCEPT
+    iptables -C FORWARD -s "$LAN_SUBNET" -d "$VPN_POOL" -j ACCEPT 2>/dev/null || iptables -A FORWARD -s "$LAN_SUBNET" -d "$VPN_POOL" -j ACCEPT
+fi
 
 ipsec start --nofork &
 IPSEC_PID=$!
