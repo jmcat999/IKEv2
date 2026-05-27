@@ -6,10 +6,22 @@ VPN_DOMAIN="${VPN_DOMAIN:?缺少 VPN_DOMAIN}"
 VPN_USER="${VPN_USER:?缺少 VPN_USER}"
 VPN_PASSWORD="${VPN_PASSWORD:?缺少 VPN_PASSWORD}"
 
-# 从 IPv4/CIDR 自动推导 /24 局域网，例如 192.168.0.240/28 -> 192.168.0.0/24
+# 从 IPv4/CIDR 或 IPv4 范围取第一个 IP。
+# 例如：192.168.0.240/28 -> 192.168.0.240
+# 例如：192.168.0.180-192.168.0.200 -> 192.168.0.180
+pool_first_ip() {
+    local pool="$1"
+    pool="${pool%%/*}"
+    pool="${pool%%-*}"
+    echo "$pool"
+}
+
+# 从 IPv4/CIDR 或 IPv4 范围自动推导 /24 局域网。
+# 例如：192.168.0.240/28 -> 192.168.0.0/24
+# 例如：192.168.0.180-192.168.0.200 -> 192.168.0.0/24
 derive_ipv4_lan24() {
-    local cidr="$1"
-    local ip="${cidr%%/*}"
+    local ip
+    ip="$(pool_first_ip "$1")"
     IFS='.' read -r a b c d <<EOF
 $ip
 EOF
@@ -19,10 +31,12 @@ EOF
     echo "$a.$b.$c.0/24"
 }
 
-# 从 IPv4/CIDR 自动推导网关 DNS，例如 192.168.0.240/28 -> 192.168.0.1
+# 从 IPv4/CIDR 或 IPv4 范围自动推导网关 DNS。
+# 例如：192.168.0.240/28 -> 192.168.0.1
+# 例如：192.168.0.180-192.168.0.200 -> 192.168.0.1
 derive_ipv4_gateway() {
-    local cidr="$1"
-    local ip="${cidr%%/*}"
+    local ip
+    ip="$(pool_first_ip "$1")"
     IFS='.' read -r a b c d <<EOF
 $ip
 EOF
@@ -30,6 +44,37 @@ EOF
         return 1
     fi
     echo "$a.$b.$c.1"
+}
+
+# strongSwan 支持 192.168.0.180-192.168.0.200 地址池，iptables 不支持这种写法。
+# 这里把地址池转换为 iptables 能接受的 match 参数。
+ipt_src_pool_args() {
+    local pool="$1"
+    if echo "$pool" | grep -q '-'; then
+        echo "-m iprange --src-range $pool"
+    else
+        echo "-s $pool"
+    fi
+}
+
+ipt_dst_pool_args() {
+    local pool="$1"
+    if echo "$pool" | grep -q '-'; then
+        echo "-m iprange --dst-range $pool"
+    else
+        echo "-d $pool"
+    fi
+}
+
+iptables_rule_ensure() {
+    local table=""
+    if [ "$1" = "-t" ]; then
+        table="-t $2"
+        shift 2
+    fi
+
+    # shellcheck disable=SC2086
+    iptables $table -C "$@" 2>/dev/null || iptables $table -A "$@"
 }
 
 case "$VPN_MODE" in
@@ -132,18 +177,26 @@ fi
 
 echo "公网网卡: $PUBLIC_IFACE"
 
-iptables -C FORWARD -s "$VPN_POOL" -j ACCEPT 2>/dev/null || iptables -A FORWARD -s "$VPN_POOL" -j ACCEPT
-iptables -C FORWARD -d "$VPN_POOL" -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || iptables -A FORWARD -d "$VPN_POOL" -m state --state ESTABLISHED,RELATED -j ACCEPT
+VPN_POOL_SRC_ARGS="$(ipt_src_pool_args "$VPN_POOL")"
+VPN_POOL_DST_ARGS="$(ipt_dst_pool_args "$VPN_POOL")"
+
+# shellcheck disable=SC2086
+iptables_rule_ensure FORWARD $VPN_POOL_SRC_ARGS -j ACCEPT
+# shellcheck disable=SC2086
+iptables_rule_ensure FORWARD $VPN_POOL_DST_ARGS -m state --state ESTABLISHED,RELATED -j ACCEPT
 
 if [ "$VPN_MODE" = "nat" ]; then
     echo "应用 NAT 模式防火墙规则: VPN 客户端通过 $PUBLIC_IFACE 做 MASQUERADE 出口"
-    iptables -t nat -C POSTROUTING -s "$VPN_POOL" -o "$PUBLIC_IFACE" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s "$VPN_POOL" -o "$PUBLIC_IFACE" -j MASQUERADE
+    # shellcheck disable=SC2086
+    iptables_rule_ensure -t nat POSTROUTING $VPN_POOL_SRC_ARGS -o "$PUBLIC_IFACE" -j MASQUERADE
 else
     echo "应用 Proxy ARP 模式防火墙规则: 不做 MASQUERADE，保留 VPN 客户端同网段源 IP"
     sysctl -w net.ipv4.conf.all.proxy_arp=1 || true
     sysctl -w "net.ipv4.conf.$PUBLIC_IFACE.proxy_arp=1" || true
-    iptables -C FORWARD -s "$VPN_POOL" -d "$LAN_SUBNET" -j ACCEPT 2>/dev/null || iptables -A FORWARD -s "$VPN_POOL" -d "$LAN_SUBNET" -j ACCEPT
-    iptables -C FORWARD -s "$LAN_SUBNET" -d "$VPN_POOL" -j ACCEPT 2>/dev/null || iptables -A FORWARD -s "$LAN_SUBNET" -d "$VPN_POOL" -j ACCEPT
+    # shellcheck disable=SC2086
+    iptables_rule_ensure FORWARD $VPN_POOL_SRC_ARGS -d "$LAN_SUBNET" -j ACCEPT
+    # shellcheck disable=SC2086
+    iptables_rule_ensure FORWARD -s "$LAN_SUBNET" $VPN_POOL_DST_ARGS -j ACCEPT
 fi
 
 ipsec start --nofork &
