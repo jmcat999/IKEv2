@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY config/strongswan.conf /etc/strongswan.conf
 COPY config/swanctl.conf.template /etc/swanctl/swanctl.conf.template
+COPY config/modes /etc/cat66-ikev2/modes
 COPY config/start.sh /start.sh
 
 RUN chmod +x /start.sh \
