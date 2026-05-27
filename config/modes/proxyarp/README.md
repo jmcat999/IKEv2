@@ -45,7 +45,27 @@ PROXYARP_DNS2=1.1.1.1
 
 ## PROXYARP_LAN_SUBNET 是什么
 
-`PROXYARP_LAN_SUBNET` 是你的局域网网段。
+一句话：
+
+```text
+PROXYARP_LAN_SUBNET = 服务端知道你的家里内网范围
+```
+
+它是给服务端脚本看的，主要用于防火墙和 Proxy ARP 判断。
+
+比如你家里是：
+
+```text
+路由器：192.168.0.1
+FnNas：192.168.0.2
+其他设备：192.168.0.x
+```
+
+那你的家里内网范围通常就是：
+
+```env
+PROXYARP_LAN_SUBNET=192.168.0.0/24
+```
 
 默认会自动从 `PROXYARP_VPN_POOL` 推导：
 
@@ -57,36 +77,43 @@ PROXYARP_DNS2=1.1.1.1
 
 一般不需要填写。
 
-只有你的局域网不是 `/24`，或者你想手动指定时，才需要写：
-
-```env
-PROXYARP_LAN_SUBNET=192.168.0.0/24
-```
+只有你的局域网不是 `/24`，或者自动推导不对，才需要手动写。
 
 ## PROXYARP_LOCAL_TS 是什么
 
-`PROXYARP_LOCAL_TS` 是服务端下发给客户端的流量选择器，决定客户端哪些目标网段走 VPN。
+一句话：
+
+```text
+PROXYARP_LOCAL_TS = 告诉客户端哪些目标地址走 VPN
+```
+
+它是给 VPN 客户端看的，决定客户端访问哪些地址时进入 VPN 隧道。
 
 默认等于 `PROXYARP_LAN_SUBNET`。
 
-例如：
+比如：
 
 ```text
 PROXYARP_LAN_SUBNET=192.168.0.0/24
 PROXYARP_LOCAL_TS 默认就是 192.168.0.0/24
 ```
 
-这表示客户端访问 `192.168.0.x` 才走 VPN，其它公网流量仍然走客户端自己的网络。
+效果就是：
+
+```text
+客户端访问 192.168.0.x 走 VPN
+客户端访问公网网站不走 VPN
+```
 
 一般不需要改。
 
-如果你想让客户端所有流量都走 VPN，可以手动设置：
+如果你想让客户端所有 IPv4 流量都走 VPN，可以手动设置：
 
 ```env
 PROXYARP_LOCAL_TS=0.0.0.0/0
 ```
 
-不过 Proxy ARP 模式一般建议保持默认，只让局域网流量走 VPN。
+不过 Proxy ARP 模式一般建议保持默认，只让家里内网流量走 VPN。
 
 ## 安全要求
 
