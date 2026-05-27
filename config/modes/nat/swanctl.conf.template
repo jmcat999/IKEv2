@@ -1,0 +1,52 @@
+connections {
+    ikev2-mschapv2 {
+        version = 2
+        local_addrs = %any
+        remote_addrs = %any
+
+        send_cert = always
+        send_certreq = no
+        encap = yes
+        fragmentation = yes
+        mobike = yes
+        unique = never
+
+        pools = vpn-pool
+
+        proposals = aes256-sha256-modp4096,aes256-sha256-modp2048,aes128-sha256-modp2048,aes256-sha1-modp2048,aes128-sha1-modp2048,aes256-sha256-modp1024,aes128-sha256-modp1024,aes256-sha1-modp1024,aes128-sha1-modp1024,3des-sha1-modp1024
+
+        local {
+            auth = pubkey
+            certs = cert.pem
+            id = ${VPN_DOMAIN}
+        }
+
+        remote {
+            auth = eap-mschapv2
+            eap_id = %any
+        }
+
+        children {
+            net {
+                local_ts = ${VPN_LOCAL_TS}
+                esp_proposals = aes256-sha256,aes128-sha256,aes256-sha1,aes128-sha1,3des-sha1
+                dpd_action = clear
+                start_action = none
+            }
+        }
+    }
+}
+
+pools {
+    vpn-pool {
+        addrs = ${VPN_POOL}
+        dns = ${VPN_DNS1}, ${VPN_DNS2}
+    }
+}
+
+secrets {
+    eap-user {
+        id = ${VPN_USER}
+        secret = "${VPN_PASSWORD}"
+    }
+}
