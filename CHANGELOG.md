@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.1.0 - Independent Mode Configs
+
+新增两种独立运行模式：
+
+### 新增
+
+- 新增 `VPN_MODE=nat` 默认模式。
+- 新增 `VPN_MODE=proxyarp` 高级同网段模式。
+- 新增独立配置目录：
+  - `config/modes/nat/swanctl.conf.template`
+  - `config/modes/proxyarp/swanctl.conf.template`
+- `start.sh` 会根据 `VPN_MODE` 自动选择对应配置。
+- NAT 模式自动启用 MASQUERADE。
+- Proxy ARP 模式不做 MASQUERADE，并开启 Proxy ARP。
+- 新增 `LAN_SUBNET` 和 `VPN_LOCAL_TS` 环境变量。
+- README 增加 NAT / Proxy ARP 两种模式教程。
+
+### 说明
+
+- NAT 模式推荐普通用户使用，默认 `VPN_POOL=10.66.0.0/24`。
+- Proxy ARP 模式适合同网段 IP 需求，例如 `VPN_POOL=192.168.0.240/28`。
+- Proxy ARP 模式必须避开主路由 DHCP 地址池和已有设备 IP。
+
 ## v1.0.0 - Official Release
 
 正式可用版本。
