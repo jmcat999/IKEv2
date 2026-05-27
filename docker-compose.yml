@@ -1,0 +1,18 @@
+services:
+  ikev2:
+    build: .
+    container_name: ikev2-mschapv2
+    restart: unless-stopped
+    network_mode: host
+    privileged: true
+
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+
+    volumes:
+      - /lib/modules:/lib/modules:ro
+      - ./certs:/certs:ro
+
+    env_file:
+      - .env
