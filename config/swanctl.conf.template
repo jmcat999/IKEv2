@@ -4,7 +4,10 @@ connections {
         local_addrs = %any
         remote_addrs = %any
 
-        send_cert = always
+        # Android/Windows clients behind mobile NAT may drop large IKE_AUTH fragments.
+        # Only send the server certificate if the client asks for it, and do not send certificate requests.
+        send_cert = ifasked
+        send_certreq = no
         encap = yes
         fragmentation = yes
         mobike = yes
