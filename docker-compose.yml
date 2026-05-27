@@ -13,6 +13,9 @@ services:
     volumes:
       - /lib/modules:/lib/modules:ro
       - ./certs:/certs:ro
+      - ./config/swanctl.conf.template:/etc/swanctl/swanctl.conf.template:ro
+      - ./config/strongswan.conf:/etc/strongswan.conf:ro
+      - ./config/start.sh:/start.sh:ro
 
     env_file:
       - .env
