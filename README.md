@@ -1,6 +1,6 @@
 # Cat66 IKEv2 Docker
 
-正式版：`v1.0.0`
+正式版：`v1.1.0`
 
 这是一个基于 **Debian + strongSwan + swanctl** 的 Docker IKEv2/IPSec 服务端项目，目标是部署安卓/Windows 原生可用的：
 
@@ -20,6 +20,34 @@ EAP-MSCHAPv2 用户认证成功
 
 ---
 
+## 两种独立模式
+
+项目现在支持两种互相独立的运行模式：
+
+```text
+nat       默认模式，VPN 客户端使用独立网段，例如 10.66.0.0/24，并通过 NAT 访问内网/外网。
+proxyarp  高级模式，VPN 客户端使用局域网同网段 IP，例如 192.168.0.240/28，不做 NAT，通过 Proxy ARP 暴露给 LAN。
+```
+
+配置文件位置：
+
+```text
+config/modes/nat/swanctl.conf.template
+config/modes/proxyarp/swanctl.conf.template
+```
+
+启动脚本会根据 `.env` 里的：
+
+```env
+VPN_MODE=nat
+# 或
+VPN_MODE=proxyarp
+```
+
+自动选择对应模式配置。
+
+---
+
 ## 目录结构
 
 推荐部署目录：
@@ -33,6 +61,11 @@ EAP-MSCHAPv2 用户认证成功
 │   ├── cat66.cn.key
 │   └── cat66.cn.pem
 ├── config
+│   ├── modes
+│   │   ├── nat
+│   │   │   └── swanctl.conf.template
+│   │   └── proxyarp
+│   │       └── swanctl.conf.template
 │   ├── strongswan.conf
 │   ├── swanctl.conf.template
 │   └── start.sh
@@ -101,15 +134,17 @@ cp .env.example .env
 nano .env
 ```
 
-至少修改：
+默认 NAT 模式配置：
 
 ```env
+VPN_MODE=nat
 VPN_DOMAIN=cat66.cn
 VPN_USER=2654603465
 VPN_PASSWORD=ChangeThisPassword123!
 VPN_POOL=10.66.0.0/24
 VPN_DNS1=1.1.1.1
 VPN_DNS2=8.8.8.8
+LAN_SUBNET=192.168.0.0/24
 ```
 
 放证书：
@@ -131,6 +166,77 @@ VPN_DNS2=8.8.8.8
 ```bash
 chmod +x install.sh
 ./install.sh
+```
+
+---
+
+## NAT 模式
+
+适合普通远程访问，推荐默认使用。
+
+`.env` 示例：
+
+```env
+VPN_MODE=nat
+VPN_POOL=10.66.0.0/24
+LAN_SUBNET=192.168.0.0/24
+# VPN_LOCAL_TS=0.0.0.0/0
+```
+
+特点：
+
+```text
+VPN 客户端拿 10.66.0.x
+容器自动做 MASQUERADE/NAT
+不需要修改主路由静态路由
+最稳定，不容易和局域网 DHCP 冲突
+```
+
+---
+
+## Proxy ARP 同网段模式
+
+高级模式，让 VPN 客户端拿局域网同网段 IP。
+
+假设局域网是：
+
+```text
+路由器：192.168.0.1
+FnNas：192.168.0.2
+LAN：192.168.0.0/24
+```
+
+建议在主路由 DHCP 里预留一小段不分配，例如：
+
+```text
+192.168.0.240 - 192.168.0.254
+```
+
+`.env` 示例：
+
+```env
+VPN_MODE=proxyarp
+VPN_POOL=192.168.0.240/28
+LAN_SUBNET=192.168.0.0/24
+# VPN_LOCAL_TS 默认等于 LAN_SUBNET
+```
+
+特点：
+
+```text
+VPN 客户端拿 192.168.0.240/28 里的地址
+不做 MASQUERADE/NAT
+宿主机开启 Proxy ARP
+局域网设备可以看到 VPN 客户端同网段源 IP
+```
+
+安全要求：
+
+```text
+不要使用整个 192.168.0.0/24 作为 VPN_POOL
+VPN_POOL 必须避开主路由 DHCP 地址池
+VPN_POOL 必须避开已有设备 IP
+如果客户端所在地网络也是 192.168.0.0/24，可能发生路由冲突
 ```
 
 ---
@@ -224,11 +330,23 @@ docker logs -f ikev2-mschapv2
 启动成功时应看到类似：
 
 ```text
+运行模式: nat
+VPN_POOL: 10.66.0.0/24
+VPN_LOCAL_TS: 0.0.0.0/0
 证书链数量: 2
 loaded certificate 'CN=cat66.cn'
 loaded certificate 'C=US, O=DigiCert Inc ...'
 loaded EAP shared key with id 'eap-user'
 loaded connection 'ikev2-mschapv2'
+```
+
+Proxy ARP 模式应看到：
+
+```text
+运行模式: proxyarp
+VPN_POOL: 192.168.0.240/28
+LAN_SUBNET: 192.168.0.0/24
+应用 Proxy ARP 模式防火墙规则: 不做 MASQUERADE
 ```
 
 ---
@@ -246,6 +364,12 @@ ikev2-mschapv2: ESTABLISHED, IKEv2
 net: INSTALLED, TUNNEL-in-UDP
 remote 10.66.0.x/32
 in/out bytes 正常增长
+```
+
+Proxy ARP 模式则会看到：
+
+```text
+remote 192.168.0.24x/32
 ```
 
 ---
@@ -337,13 +461,31 @@ grep -c "BEGIN CERTIFICATE" certs/cert.pem
 openssl x509 -in certs/cert.pem -noout -subject -issuer -dates -ext subjectAltName -ext extendedKeyUsage
 ```
 
-### 5. 能连接但不能上网
+### 5. NAT 模式能连接但不能上网
 
 检查 IPv4 转发和 NAT：
 
 ```bash
 sysctl net.ipv4.ip_forward
 iptables -t nat -S | grep 10.66
+```
+
+### 6. Proxy ARP 模式同网段不通
+
+检查：
+
+```bash
+cat /proc/sys/net/ipv4/conf/all/proxy_arp
+ip neigh show
+iptables -S FORWARD
+```
+
+同时确认：
+
+```text
+VPN_POOL 没有和 DHCP 地址池冲突
+VPN_POOL 没有和已有设备 IP 冲突
+客户端所在地网络没有和家里 LAN 网段重叠
 ```
 
 ---
