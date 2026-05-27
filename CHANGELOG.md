@@ -1,5 +1,56 @@
 # Changelog
 
+## v1.2.0 - Official Proxy ARP Mode Release
+
+将当前版本作为正式版。
+
+### 新增与完善
+
+- Proxy ARP 同网段模式正式可用。
+- 支持 `PROXYARP_VPN_POOL` 使用 CIDR：
+  - `192.168.0.240/28`
+- 支持 `PROXYARP_VPN_POOL` 使用 IP 范围：
+  - `192.168.0.180-192.168.0.200`
+- 修复 Docker Compose 本地部署时没有挂载 `config/modes` 的问题。
+- 修复 IP 范围地址池无法写入 iptables 规则的问题。
+- NAT 和 Proxy ARP 两套配置可以同时存在，只通过 `VPN_MODE` 选择当前运行模式。
+- 支持不同模式独立配置 DNS：
+  - `NAT_DNS1` / `NAT_DNS2`
+  - `PROXYARP_DNS1` / `PROXYARP_DNS2`
+- Proxy ARP 模式支持自动推导：
+  - `PROXYARP_LAN_SUBNET`
+  - `PROXYARP_DNS1`
+- 用大白话补充解释高级字段：
+  - `PROXYARP_LAN_SUBNET = 服务端知道你的家里内网范围`
+  - `PROXYARP_LOCAL_TS = 告诉客户端哪些目标地址走 VPN`
+
+### 推荐配置
+
+NAT 默认模式：
+
+```env
+VPN_MODE=nat
+NAT_VPN_POOL=10.66.0.0/24
+NAT_DNS1=1.1.1.1
+NAT_DNS2=8.8.8.8
+```
+
+Proxy ARP 同网段模式：
+
+```env
+VPN_MODE=proxyarp
+PROXYARP_VPN_POOL=192.168.0.180-192.168.0.200
+# PROXYARP_LAN_SUBNET 默认自动推导
+# PROXYARP_LOCAL_TS 默认等于 PROXYARP_LAN_SUBNET
+```
+
+### 注意事项
+
+- Proxy ARP 地址池必须避开路由器 DHCP 地址池。
+- Proxy ARP 地址池不能和已有局域网设备冲突。
+- 如果客户端所在地网络和家里内网网段重叠，可能发生路由冲突。
+- 默认 Proxy ARP 模式只让家里内网流量走 VPN；如果设置 `PROXYARP_LOCAL_TS=0.0.0.0/0`，则客户端所有 IPv4 流量都会走 VPN。
+
 ## v1.1.0 - Independent Mode Configs
 
 新增两种独立运行模式：
