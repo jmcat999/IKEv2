@@ -1,6 +1,6 @@
 # Cat66 IKEv2 Docker
 
-正式版：`v1.2.0`
+正式版：`v1.2.1`
 
 这是一个基于 **Debian + strongSwan + swanctl** 的 Docker IKEv2/IPSec 服务端项目，目标是部署安卓/Windows 原生可用的：
 
@@ -296,6 +296,7 @@ NAT_DNS2=8.8.8.8
 ```text
 VPN 客户端拿 10.66.0.x
 容器自动做 MASQUERADE/NAT
+VPN 客户端可以访问部署 IKEv2 这台机器自己的所有服务
 不需要修改主路由静态路由
 最稳定，不容易和局域网 DHCP 冲突
 ```
@@ -340,6 +341,7 @@ VPN 客户端拿 192.168.0.240/28 里的地址
 不做 MASQUERADE/NAT
 宿主机开启 Proxy ARP
 局域网设备可以看到 VPN 客户端同网段源 IP
+VPN 客户端可以访问部署 IKEv2 这台机器自己的所有服务
 ```
 
 安全要求：
@@ -447,6 +449,7 @@ VPN_POOL: 10.66.0.0/24
 VPN_LOCAL_TS: 0.0.0.0/0
 VPN_USERS_FILE: /etc/cat66-ikev2/users.txt
 已加载 EAP 账号数量: 3
+允许 VPN 客户端访问本机服务: 10.66.0.0/24
 证书链数量: 2
 loaded certificate 'CN=cat66.cn'
 loaded certificate 'C=US, O=DigiCert Inc ...'
@@ -460,6 +463,7 @@ Proxy ARP 模式应看到：
 运行模式: proxyarp
 VPN_POOL: 192.168.0.240/28
 LAN_SUBNET: 192.168.0.0/24
+允许 VPN 客户端访问本机服务: 192.168.0.240/28
 应用 Proxy ARP 模式防火墙规则: 不做 MASQUERADE
 ```
 
@@ -613,7 +617,39 @@ user1
 user1:
 ```
 
-### 7. NAT 模式能连接但不能上网
+### 7. 能访问局域网其他设备，但不能访问 IKEv2 宿主机自己的服务
+
+访问局域网其他设备通常走 `FORWARD` 链；访问部署 IKEv2 这台机器自己的服务走 `INPUT` 链。
+
+本项目启动脚本会自动放行 VPN 地址池到本机服务：
+
+```text
+允许 VPN 客户端访问本机服务: <VPN_POOL>
+```
+
+如果仍然无法访问，检查服务是否只监听了 `127.0.0.1`：
+
+```bash
+ss -lntup
+```
+
+如果看到服务只监听：
+
+```text
+127.0.0.1:端口
+```
+
+需要把服务改成监听：
+
+```text
+0.0.0.0:端口
+```
+
+或者监听宿主机 LAN IP。
+
+如果服务是 Docker 容器，还要确认端口没有只绑定到 `127.0.0.1`。
+
+### 8. NAT 模式能连接但不能上网
 
 检查 IPv4 转发和 NAT：
 
@@ -622,7 +658,7 @@ sysctl net.ipv4.ip_forward
 iptables -t nat -S | grep 10.66
 ```
 
-### 8. Proxy ARP 模式同网段不通
+### 9. Proxy ARP 模式同网段不通
 
 检查：
 
@@ -630,6 +666,7 @@ iptables -t nat -S | grep 10.66
 cat /proc/sys/net/ipv4/conf/all/proxy_arp
 ip neigh show
 iptables -S FORWARD
+iptables -S INPUT
 ```
 
 同时确认：
