@@ -249,6 +249,13 @@ echo "公网网卡: $PUBLIC_IFACE"
 VPN_POOL_SRC_ARGS="$(ipt_src_pool_args "$VPN_POOL")"
 VPN_POOL_DST_ARGS="$(ipt_dst_pool_args "$VPN_POOL")"
 
+# 允许 VPN 客户端访问部署 IKEv2 这台机器自己的所有服务。
+# 访问宿主机本机服务走 INPUT 链，不走 FORWARD 链；没有这条规则时可能出现
+# “能访问局域网其他设备，但不能访问 IKEv2 宿主机服务”的现象。
+echo "允许 VPN 客户端访问本机服务: $VPN_POOL"
+# shellcheck disable=SC2086
+iptables_rule_ensure INPUT $VPN_POOL_SRC_ARGS -j ACCEPT
+
 # shellcheck disable=SC2086
 iptables_rule_ensure FORWARD $VPN_POOL_SRC_ARGS -j ACCEPT
 # shellcheck disable=SC2086
