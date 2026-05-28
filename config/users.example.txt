@@ -1,0 +1,12 @@
+# Cat66 IKEv2 VPN accounts
+# 格式：用户名:密码
+# 每行一个账号，空行和 # 开头的行会被忽略。
+#
+# 请复制本文件为 config/users.txt 后修改为你的真实账号：
+# cp config/users.example.txt config/users.txt
+#
+# 注意：config/users.txt 包含明文密码，已经被 .gitignore 忽略，不要提交到 GitHub。
+
+user1:replace-with-a-strong-password
+user2:replace-with-another-strong-password
+mobile-user:replace-with-mobile-user-password
