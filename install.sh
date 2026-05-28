@@ -6,12 +6,27 @@ IMAGE_DEFAULT="ghcr.io/jmcat999/ikev2:latest"
 
 cd "$(dirname "$0")"
 
-mkdir -p ssl certs data
+mkdir -p ssl certs data config
 
 if [ ! -f .env ]; then
   cp .env.example .env
-  echo "已生成 .env，请先编辑 VPN_DOMAIN、VPN_USER、VPN_PASSWORD 后重新运行。"
+  echo "已生成 .env，请先编辑 VPN_DOMAIN 和运行模式配置后重新运行。"
   echo "文件路径：$(pwd)/.env"
+  exit 1
+fi
+
+if [ ! -f config/users.txt ]; then
+  if [ -f config/users.example.txt ]; then
+    cp config/users.example.txt config/users.txt
+  else
+    cat > config/users.txt <<'EOF'
+user1:replace-with-a-strong-password
+EOF
+  fi
+  chmod 600 config/users.txt || true
+  echo "已生成 config/users.txt，请先填写 VPN 账号和密码后重新运行。"
+  echo "格式：用户名:密码，每行一个账号。"
+  echo "文件路径：$(pwd)/config/users.txt"
   exit 1
 fi
 
@@ -36,6 +51,7 @@ if [ ! -f certs/privkey.pem ]; then
 fi
 
 chmod 600 certs/privkey.pem || true
+chmod 600 config/users.txt || true
 
 echo "加载宿主机 IPsec/XFRM 模块..."
 modprobe xfrm_user || true
@@ -79,5 +95,5 @@ echo "安卓填写："
 echo "  类型：IKEv2/IPSec MSCHAPv2"
 echo "  服务器地址：.env 里的 VPN_DOMAIN"
 echo "  IPSec 标识符：.env 里的 VPN_DOMAIN"
-echo "  用户名：.env 里的 VPN_USER"
-echo "  密码：.env 里的 VPN_PASSWORD"
+echo "  用户名：config/users.txt 里的用户名"
+echo "  密码：config/users.txt 对应用户的密码"
