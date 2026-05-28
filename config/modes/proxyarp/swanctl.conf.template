@@ -43,10 +43,3 @@ pools {
         dns = ${VPN_DNS1}, ${VPN_DNS2}
     }
 }
-
-secrets {
-    eap-user {
-        id = ${VPN_USER}
-        secret = "${VPN_PASSWORD}"
-    }
-}
