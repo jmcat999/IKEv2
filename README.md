@@ -1,6 +1,6 @@
 # Cat66 IKEv2 Docker
 
-正式版：`v1.1.0`
+正式版：`v1.2.0`
 
 这是一个基于 **Debian + strongSwan + swanctl** 的 Docker IKEv2/IPSec 服务端项目，目标是部署安卓/Windows 原生可用的：
 
@@ -20,9 +20,35 @@ EAP-MSCHAPv2 用户认证成功
 
 ---
 
+## 核心变化
+
+账号不再写在 `.env` 里。
+
+本项目现在统一使用：
+
+```text
+config/users.txt
+```
+
+作为 VPN 账号文件。每行一个账号：
+
+```text
+用户名:密码
+```
+
+示例文件：
+
+```text
+config/users.example.txt
+```
+
+真实账号文件 `config/users.txt` 已经被 `.gitignore` 忽略，不要提交到 GitHub。
+
+---
+
 ## 两种独立模式
 
-项目现在支持两种互相独立的运行模式：
+项目支持两种互相独立的运行模式：
 
 ```text
 nat       默认模式，VPN 客户端使用独立网段，例如 10.66.0.0/24，并通过 NAT 访问内网/外网。
@@ -61,6 +87,8 @@ VPN_MODE=proxyarp
 │   ├── cat66.cn.key
 │   └── cat66.cn.pem
 ├── config
+│   ├── users.txt              # 本地 VPN 账号文件，不提交 GitHub
+│   ├── users.example.txt      # 示例账号文件
 │   ├── modes
 │   │   ├── nat
 │   │   │   └── swanctl.conf.template
@@ -90,8 +118,6 @@ certs/privkey.pem 必须和证书匹配
 服务器证书 -> /etc/swanctl/x509/cert.pem
 中间证书 -> /etc/swanctl/x509ca/chain-01.pem
 ```
-
-这是本项目正式版的关键修复点。
 
 ---
 
@@ -127,7 +153,7 @@ cd /vol1/1000/docker/ikev2
 git clone https://github.com/jmcat999/IKEv2.git .
 ```
 
-复制配置：
+复制并编辑 `.env`：
 
 ```bash
 cp .env.example .env
@@ -139,12 +165,28 @@ nano .env
 ```env
 VPN_MODE=nat
 VPN_DOMAIN=cat66.cn
-VPN_USER=2654603465
-VPN_PASSWORD=ChangeThisPassword123!
-VPN_POOL=10.66.0.0/24
-VPN_DNS1=1.1.1.1
-VPN_DNS2=8.8.8.8
-LAN_SUBNET=192.168.0.0/24
+
+NAT_VPN_POOL=10.66.0.0/24
+NAT_DNS1=1.1.1.1
+NAT_DNS2=8.8.8.8
+# NAT_LOCAL_TS=0.0.0.0/0
+```
+
+创建账号文件：
+
+```bash
+cp config/users.example.txt config/users.txt
+nano config/users.txt
+chmod 600 config/users.txt
+```
+
+账号文件格式：
+
+```text
+# 用户名:密码
+user1:your-strong-password
+user2:another-strong-password
+mobile-user:mobile-user-password
 ```
 
 放证书：
@@ -170,6 +212,57 @@ chmod +x install.sh
 
 ---
 
+## 多账号配置
+
+`config/users.txt` 是唯一账号来源。
+
+格式：
+
+```text
+用户名:密码
+```
+
+规则：
+
+```text
+每行一个账号
+空行会被忽略
+# 开头的注释行会被忽略
+用户名不能为空
+密码不能为空
+密码里可以包含冒号，脚本只按第一个冒号切分用户名和密码
+```
+
+示例：
+
+```text
+admin:your-admin-password
+phone:your-phone-password
+laptop:your-laptop-password
+```
+
+启动脚本会自动生成 strongSwan `swanctl.conf` 里的：
+
+```text
+secrets {
+    eap-user-1 { ... }
+    eap-user-2 { ... }
+    eap-user-3 { ... }
+}
+```
+
+然后通过 `swanctl --load-all` 加载。
+
+注意：
+
+```text
+config/users.txt 包含明文密码
+config/users.txt 已被 .gitignore 忽略
+不要把真实账号文件提交到 GitHub
+```
+
+---
+
 ## NAT 模式
 
 适合普通远程访问，推荐默认使用。
@@ -178,9 +271,12 @@ chmod +x install.sh
 
 ```env
 VPN_MODE=nat
-VPN_POOL=10.66.0.0/24
-LAN_SUBNET=192.168.0.0/24
-# VPN_LOCAL_TS=0.0.0.0/0
+VPN_DOMAIN=cat66.cn
+
+NAT_VPN_POOL=10.66.0.0/24
+NAT_DNS1=1.1.1.1
+NAT_DNS2=8.8.8.8
+# NAT_LOCAL_TS=0.0.0.0/0
 ```
 
 特点：
@@ -216,9 +312,13 @@ LAN：192.168.0.0/24
 
 ```env
 VPN_MODE=proxyarp
-VPN_POOL=192.168.0.240/28
-LAN_SUBNET=192.168.0.0/24
-# VPN_LOCAL_TS 默认等于 LAN_SUBNET
+VPN_DOMAIN=cat66.cn
+
+PROXYARP_VPN_POOL=192.168.0.240/28
+# PROXYARP_LAN_SUBNET=192.168.0.0/24
+# PROXYARP_LOCAL_TS=192.168.0.0/24
+# PROXYARP_DNS1=192.168.0.1
+# PROXYARP_DNS2=1.1.1.1
 ```
 
 特点：
@@ -233,9 +333,9 @@ VPN 客户端拿 192.168.0.240/28 里的地址
 安全要求：
 
 ```text
-不要使用整个 192.168.0.0/24 作为 VPN_POOL
-VPN_POOL 必须避开主路由 DHCP 地址池
-VPN_POOL 必须避开已有设备 IP
+不要使用整个 192.168.0.0/24 作为 PROXYARP_VPN_POOL
+PROXYARP_VPN_POOL 必须避开主路由 DHCP 地址池
+PROXYARP_VPN_POOL 必须避开已有设备 IP
 如果客户端所在地网络也是 192.168.0.0/24，可能发生路由冲突
 ```
 
@@ -254,8 +354,8 @@ IKEv2/IPSec MSCHAPv2
 ```text
 服务器地址：cat66.cn
 IPSec 标识符：cat66.cn
-用户名：2654603465
-密码：.env 里的 VPN_PASSWORD
+用户名：config/users.txt 里的用户名
+密码：config/users.txt 对应用户的密码
 ```
 
 注意：
@@ -333,10 +433,12 @@ docker logs -f ikev2-mschapv2
 运行模式: nat
 VPN_POOL: 10.66.0.0/24
 VPN_LOCAL_TS: 0.0.0.0/0
+VPN_USERS_FILE: /etc/cat66-ikev2/users.txt
+已加载 EAP 账号数量: 3
 证书链数量: 2
 loaded certificate 'CN=cat66.cn'
 loaded certificate 'C=US, O=DigiCert Inc ...'
-loaded EAP shared key with id 'eap-user'
+loaded EAP shared key with id 'user1'
 loaded connection 'ikev2-mschapv2'
 ```
 
@@ -461,7 +563,45 @@ grep -c "BEGIN CERTIFICATE" certs/cert.pem
 openssl x509 -in certs/cert.pem -noout -subject -issuer -dates -ext subjectAltName -ext extendedKeyUsage
 ```
 
-### 5. NAT 模式能连接但不能上网
+### 5. `找不到账号文件 /etc/cat66-ikev2/users.txt`
+
+说明本地没有创建 `config/users.txt`，或者 `docker-compose.yml` 没有正确挂载。
+
+检查：
+
+```bash
+ls -l config/users.txt
+docker compose config | grep users.txt
+```
+
+重新创建：
+
+```bash
+cp config/users.example.txt config/users.txt
+nano config/users.txt
+chmod 600 config/users.txt
+```
+
+### 6. `账号文件存在无效行`
+
+说明 `config/users.txt` 里有一行不是 `用户名:密码` 格式。
+
+正确示例：
+
+```text
+admin:your-admin-password
+phone:your-phone-password
+```
+
+错误示例：
+
+```text
+admin
+:password
+user:
+```
+
+### 7. NAT 模式能连接但不能上网
 
 检查 IPv4 转发和 NAT：
 
@@ -470,7 +610,7 @@ sysctl net.ipv4.ip_forward
 iptables -t nat -S | grep 10.66
 ```
 
-### 6. Proxy ARP 模式同网段不通
+### 8. Proxy ARP 模式同网段不通
 
 检查：
 
@@ -483,8 +623,8 @@ iptables -S FORWARD
 同时确认：
 
 ```text
-VPN_POOL 没有和 DHCP 地址池冲突
-VPN_POOL 没有和已有设备 IP 冲突
+PROXYARP_VPN_POOL 没有和 DHCP 地址池冲突
+PROXYARP_VPN_POOL 没有和已有设备 IP 冲突
 客户端所在地网络没有和家里 LAN 网段重叠
 ```
 
@@ -496,7 +636,7 @@ VPN_POOL 没有和已有设备 IP 冲突
 
 ```text
 ikev2-mschapv2: ESTABLISHED, IKEv2
-remote 'cat66.cn' @ x.x.x.x EAP: '2654603465' [10.66.0.1]
+remote 'cat66.cn' @ x.x.x.x EAP: 'user1' [10.66.0.1]
 net: INSTALLED, TUNNEL-in-UDP
 in/out packets 正常增长
 ```
