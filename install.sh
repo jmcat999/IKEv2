@@ -20,12 +20,15 @@ if [ ! -f config/users.txt ]; then
     cp config/users.example.txt config/users.txt
   else
     cat > config/users.txt <<'EOF'
-user1:replace-with-a-strong-password
+user1:password1
+user2:password2
+user3:password3
 EOF
   fi
   chmod 600 config/users.txt || true
   echo "已生成 config/users.txt，请先填写 VPN 账号和密码后重新运行。"
   echo "格式：用户名:密码，每行一个账号。"
+  echo "示例：user1:password1"
   echo "文件路径：$(pwd)/config/users.txt"
   exit 1
 fi
