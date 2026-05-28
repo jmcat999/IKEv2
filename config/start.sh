@@ -1,10 +1,9 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 VPN_MODE="${VPN_MODE:-nat}"
 VPN_DOMAIN="${VPN_DOMAIN:?缺少 VPN_DOMAIN}"
-VPN_USER="${VPN_USER:?缺少 VPN_USER}"
-VPN_PASSWORD="${VPN_PASSWORD:?缺少 VPN_PASSWORD}"
+VPN_USERS_FILE="${VPN_USERS_FILE:-/etc/cat66-ikev2/users.txt}"
 
 # 从 IPv4/CIDR 或 IPv4 范围取第一个 IP。
 # 例如：192.168.0.240/28 -> 192.168.0.240
@@ -77,18 +76,85 @@ iptables_rule_ensure() {
     iptables $table -C "$@" 2>/dev/null || iptables $table -A "$@"
 }
 
+escape_swanctl_secret() {
+    # swanctl.conf 使用双引号包裹 secret，这里只转义反斜杠和双引号。
+    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+generate_eap_secrets() {
+    if [ ! -f "$VPN_USERS_FILE" ]; then
+        echo "错误: 找不到账号文件 $VPN_USERS_FILE" >&2
+        echo "请创建 config/users.txt，格式为：用户名:密码" >&2
+        exit 1
+    fi
+
+    local tmp_file count line user pass escaped_pass
+    tmp_file="$(mktemp)"
+    count=0
+
+    {
+        echo ""
+        echo "secrets {"
+    } > "$tmp_file"
+
+    while IFS= read -r line || [ -n "$line" ]; do
+        # 跳过空行和注释行。
+        case "$line" in
+            ''|'#'*) continue ;;
+        esac
+
+        if ! echo "$line" | grep -q ':'; then
+            echo "错误: 账号文件存在无效行，必须使用 用户名:密码 格式：$line" >&2
+            rm -f "$tmp_file"
+            exit 1
+        fi
+
+        user="${line%%:*}"
+        pass="${line#*:}"
+
+        if [ -z "$user" ] || [ -z "$pass" ]; then
+            echo "错误: 账号文件存在空用户名或空密码：$line" >&2
+            rm -f "$tmp_file"
+            exit 1
+        fi
+
+        count=$((count + 1))
+        escaped_pass="$(escape_swanctl_secret "$pass")"
+
+        {
+            echo "    eap-user-$count {"
+            echo "        id = $user"
+            echo "        secret = \"$escaped_pass\""
+            echo "    }"
+            echo ""
+        } >> "$tmp_file"
+    done < "$VPN_USERS_FILE"
+
+    if [ "$count" -eq 0 ]; then
+        echo "错误: 账号文件 $VPN_USERS_FILE 没有有效账号" >&2
+        rm -f "$tmp_file"
+        exit 1
+    fi
+
+    echo "}" >> "$tmp_file"
+    cat "$tmp_file"
+    rm -f "$tmp_file"
+
+    echo "已加载 EAP 账号数量: $count" >&2
+}
+
 case "$VPN_MODE" in
     nat)
         # NAT 模式独立配置。可以和 Proxy ARP 配置同时存在。
-        VPN_POOL="${NAT_VPN_POOL:-${VPN_POOL:-10.66.0.0/24}}"
-        VPN_DNS1="${NAT_DNS1:-${VPN_DNS1:-1.1.1.1}}"
-        VPN_DNS2="${NAT_DNS2:-${VPN_DNS2:-8.8.8.8}}"
-        VPN_LOCAL_TS="${NAT_LOCAL_TS:-${VPN_LOCAL_TS:-0.0.0.0/0}}"
+        VPN_POOL="${NAT_VPN_POOL:-10.66.0.0/24}"
+        VPN_DNS1="${NAT_DNS1:-1.1.1.1}"
+        VPN_DNS2="${NAT_DNS2:-8.8.8.8}"
+        VPN_LOCAL_TS="${NAT_LOCAL_TS:-0.0.0.0/0}"
         LAN_SUBNET="${LAN_SUBNET:-}"
         ;;
     proxyarp)
         # Proxy ARP 模式独立配置。通常只需要填写 PROXYARP_VPN_POOL。
-        VPN_POOL="${PROXYARP_VPN_POOL:-${VPN_POOL:-192.168.0.240/28}}"
+        VPN_POOL="${PROXYARP_VPN_POOL:-192.168.0.240/28}"
         AUTO_LAN_SUBNET="$(derive_ipv4_lan24 "$VPN_POOL" || true)"
         AUTO_LAN_DNS="$(derive_ipv4_gateway "$VPN_POOL" || true)"
         LAN_SUBNET="${PROXYARP_LAN_SUBNET:-${LAN_SUBNET:-${AUTO_LAN_SUBNET}}}"
@@ -96,9 +162,9 @@ case "$VPN_MODE" in
             echo "错误: 无法从 PROXYARP_VPN_POOL=$VPN_POOL 自动推导 LAN_SUBNET，请手动设置 PROXYARP_LAN_SUBNET"
             exit 1
         fi
-        VPN_LOCAL_TS="${PROXYARP_LOCAL_TS:-${VPN_LOCAL_TS:-$LAN_SUBNET}}"
-        VPN_DNS1="${PROXYARP_DNS1:-${VPN_DNS1:-${AUTO_LAN_DNS:-1.1.1.1}}}"
-        VPN_DNS2="${PROXYARP_DNS2:-${VPN_DNS2:-1.1.1.1}}"
+        VPN_LOCAL_TS="${PROXYARP_LOCAL_TS:-$LAN_SUBNET}"
+        VPN_DNS1="${PROXYARP_DNS1:-${AUTO_LAN_DNS:-1.1.1.1}}"
+        VPN_DNS2="${PROXYARP_DNS2:-1.1.1.1}"
         ;;
     *)
         echo "错误: 不支持的 VPN_MODE=$VPN_MODE，只能是 nat 或 proxyarp"
@@ -106,7 +172,7 @@ case "$VPN_MODE" in
         ;;
 esac
 
-export VPN_MODE VPN_DOMAIN VPN_USER VPN_PASSWORD VPN_POOL VPN_DNS1 VPN_DNS2 LAN_SUBNET VPN_LOCAL_TS
+export VPN_MODE VPN_DOMAIN VPN_POOL VPN_DNS1 VPN_DNS2 LAN_SUBNET VPN_LOCAL_TS
 
 modprobe xfrm_user || true
 modprobe xfrm_interface || true
@@ -140,6 +206,7 @@ echo "运行模式: $VPN_MODE"
 echo "VPN_POOL: $VPN_POOL"
 echo "VPN_DNS: $VPN_DNS1, $VPN_DNS2"
 echo "VPN_LOCAL_TS: $VPN_LOCAL_TS"
+echo "VPN_USERS_FILE: $VPN_USERS_FILE"
 if [ "$VPN_MODE" = "proxyarp" ]; then
     echo "LAN_SUBNET: $LAN_SUBNET"
 fi
@@ -162,8 +229,10 @@ else
     exit 1
 fi
 
+generate_eap_secrets >> /etc/swanctl/swanctl.conf
+
 echo "关键 swanctl 配置:"
-grep -E 'send_cert|send_certreq|mobike|fragmentation|proposals|eap_id|local_ts|dns =' /etc/swanctl/swanctl.conf || true
+grep -E 'send_cert|send_certreq|mobike|fragmentation|proposals|eap_id|local_ts|dns =|secrets|eap-user-' /etc/swanctl/swanctl.conf || true
 
 sysctl -w net.ipv4.ip_forward=1 || true
 
