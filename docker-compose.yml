@@ -13,6 +13,7 @@ services:
     volumes:
       - /lib/modules:/lib/modules:ro
       - ./certs:/certs:ro
+      - ./config/users.txt:/etc/cat66-ikev2/users.txt:ro
       - ./config/modes:/etc/cat66-ikev2/modes:ro
       - ./config/swanctl.conf.template:/etc/swanctl/swanctl.conf.template:ro
       - ./config/strongswan.conf:/etc/strongswan.conf:ro
