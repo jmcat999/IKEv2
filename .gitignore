@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# local VPN accounts
+config/users.txt
+
 # certificates and private keys
 certs/
 ssl/
