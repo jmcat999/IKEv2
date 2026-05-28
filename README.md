@@ -180,13 +180,13 @@ nano config/users.txt
 chmod 600 config/users.txt
 ```
 
-账号文件格式：
+账号文件就是账号和密码，两项之间用英文冒号 `:` 分隔：
 
 ```text
 # 用户名:密码
-user1:your-strong-password
-user2:another-strong-password
-mobile-user:mobile-user-password
+user1:password1
+user2:password2
+user3:password3
 ```
 
 放证书：
@@ -222,6 +222,12 @@ chmod +x install.sh
 用户名:密码
 ```
 
+也就是：
+
+```text
+账号:密码
+```
+
 规则：
 
 ```text
@@ -236,9 +242,15 @@ chmod +x install.sh
 示例：
 
 ```text
-admin:your-admin-password
-phone:your-phone-password
-laptop:your-laptop-password
+user1:password1
+user2:password2
+user3:password3
+```
+
+如果只需要一个账号，只写一行即可：
+
+```text
+user1:password1
 ```
 
 启动脚本会自动生成 strongSwan `swanctl.conf` 里的：
@@ -589,16 +601,16 @@ chmod 600 config/users.txt
 正确示例：
 
 ```text
-admin:your-admin-password
-phone:your-phone-password
+user1:password1
+user2:password2
 ```
 
 错误示例：
 
 ```text
-admin
-:password
-user:
+user1
+:password1
+user1:
 ```
 
 ### 7. NAT 模式能连接但不能上网
