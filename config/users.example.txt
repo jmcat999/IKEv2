@@ -7,6 +7,6 @@
 #
 # 注意：config/users.txt 包含明文密码，已经被 .gitignore 忽略，不要提交到 GitHub。
 
-user1:replace-with-a-strong-password
-user2:replace-with-another-strong-password
-mobile-user:replace-with-mobile-user-password
+user1:password1
+user2:password2
+user3:password3
