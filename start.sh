@@ -88,7 +88,7 @@ escape_swanctl_secret() {
 generate_eap_secrets() {
     if [ ! -f "$VPN_USERS_FILE" ]; then
         echo "错误: 找不到账号文件 $VPN_USERS_FILE" >&2
-        echo "请创建 config/users.txt，格式为：用户名:密码" >&2
+        echo "请检查默认的 config/users.txt 是否正确挂载" >&2
         exit 1
     fi
 

@@ -3,11 +3,10 @@
 .env.*
 !.env.example
 
-# local VPN accounts
-config/users.txt
-
 # certificates and private keys
-ssl/
+ssl/*
+!ssl/README.md
+*.crt
 *.key
 *.pem
 *.p12

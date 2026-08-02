@@ -1,4 +1,4 @@
-# Cat66 IKEv2 Docker
+# IKEv2 Docker
 
 这是一个基于 **Debian + strongSwan + swanctl** 的 Docker IKEv2/IPSec 服务端项目，目标是部署安卓/Windows 原生可用的：
 
@@ -34,7 +34,7 @@ config/users.txt
 用户名:密码
 ```
 
-真实账号文件 `config/users.txt` 已经被 `.gitignore` 忽略，不要提交到 GitHub。
+仓库默认提供带注释说明的 `config/users.txt`。填写真实账号后，不要将该文件的改动提交到 GitHub。
 
 ---
 
@@ -66,6 +66,7 @@ VPN_MODE=proxyarp
 ```text
 /vol1/1000/docker/ikev2
 ├── ssl                # 唯一证书目录
+│   ├── README.md       # 证书放置说明
 │   ├── server.crt     # 默认 fullchain，服务器证书 + 中间证书
 │   └── server.key     # 默认私钥
 ├── config
@@ -84,7 +85,7 @@ VPN_MODE=proxyarp
 ```text
 ssl/$VPN_CERT_FILE 必须是 fullchain
 ssl/$VPN_KEY_FILE 必须和证书匹配
-证书 SAN 必须包含 VPN_DOMAIN，例如 DNS:cat66.cn
+证书 SAN 必须包含 VPN_DOMAIN，例如 DNS:vpn.example.com
 证书 EKU 需要包含 TLS Web Server Authentication
 ```
 
@@ -125,9 +126,9 @@ ip xfrm policy
 
 ---
 
-## 一键安装
+## 从零部署
 
-在 FnNas 宿主机执行：
+在 NAS 或 Linux 宿主机执行：
 
 ```bash
 mkdir -p /vol1/1000/docker/ikev2
@@ -135,6 +136,8 @@ cd /vol1/1000/docker/ikev2
 
 git clone https://github.com/jmcat999/IKEv2.git .
 ```
+
+克隆完成后，仓库已经包含 `ssl/` 目录和带注释示例的 `config/users.txt`，不需要手动创建目录或文件。
 
 复制并编辑 `.env`：
 
@@ -147,7 +150,7 @@ nano .env
 
 ```env
 VPN_MODE=nat
-VPN_DOMAIN=cat66.cn
+VPN_DOMAIN=vpn.example.com
 
 NAT_VPN_POOL=10.66.0.0/24
 NAT_DNS1=1.1.1.1
@@ -155,14 +158,17 @@ NAT_DNS2=8.8.8.8
 # NAT_LOCAL_TS=0.0.0.0/0
 ```
 
-创建账号文件：
+填写账号文件：
 
 ```bash
-mkdir -p config
-touch config/users.txt
+# 在部署机器上隐藏本地账号改动，避免误提交明文密码
+git update-index --skip-worktree config/users.txt
+
 nano config/users.txt
 chmod 600 config/users.txt
 ```
+
+默认文件只有注释示例；未填写至少一个有效账号时，`install.sh` 会停止部署。
 
 账号文件就是账号和密码，两项之间用英文冒号 `:` 分隔：
 
@@ -253,8 +259,8 @@ secrets {
 
 ```text
 config/users.txt 包含明文密码
-config/users.txt 已被 .gitignore 忽略
-不要把真实账号文件提交到 GitHub
+仓库中的 config/users.txt 默认只有注释示例
+填写真实账号后，不要把改动提交到 GitHub
 ```
 
 ---
@@ -267,7 +273,7 @@ config/users.txt 已被 .gitignore 忽略
 
 ```env
 VPN_MODE=nat
-VPN_DOMAIN=cat66.cn
+VPN_DOMAIN=vpn.example.com
 
 NAT_VPN_POOL=10.66.0.0/24
 NAT_DNS1=1.1.1.1
@@ -309,7 +315,7 @@ LAN：192.168.0.0/24
 
 ```env
 VPN_MODE=proxyarp
-VPN_DOMAIN=cat66.cn
+VPN_DOMAIN=vpn.example.com
 
 PROXYARP_VPN_POOL=192.168.0.240/28
 # PROXYARP_LAN_SUBNET=192.168.0.0/24
@@ -350,8 +356,8 @@ IKEv2/IPSec MSCHAPv2
 填写：
 
 ```text
-服务器地址：cat66.cn
-IPSec 标识符：cat66.cn
+服务器地址：vpn.example.com
+IPSec 标识符：vpn.example.com
 用户名：config/users.txt 里的用户名
 密码：config/users.txt 对应用户的密码
 ```
@@ -372,8 +378,8 @@ IPSec 标识符：cat66.cn
 建议用管理员 PowerShell 创建：
 
 ```powershell
-$Name = "Cat66 IKEv2"
-$Server = "cat66.cn"
+$Name = "IKEv2 VPN"
+$Server = "vpn.example.com"
 
 Remove-VpnConnection -Name $Name -Force -ErrorAction SilentlyContinue
 
@@ -395,7 +401,7 @@ Add-VpnConnection `
 
 ```powershell
 Set-VpnConnectionIPsecConfiguration `
-  -ConnectionName "Cat66 IKEv2" `
+  -ConnectionName "IKEv2 VPN" `
   -AuthenticationTransformConstants SHA256128 `
   -CipherTransformConstants AES256 `
   -EncryptionMethod AES256 `
@@ -435,7 +441,7 @@ VPN_USERS_FILE: /etc/ikev2/users.txt
 已加载 EAP 账号数量: 3
 允许 VPN 客户端访问本机服务: 10.66.0.0/24
 证书链数量: 2
-loaded certificate 'CN=cat66.cn'
+loaded certificate 'CN=vpn.example.com'
 loaded certificate 'C=US, O=DigiCert Inc ...'
 loaded EAP shared key with id 'user1'
 loaded connection 'ikev2-mschapv2'
@@ -564,7 +570,7 @@ openssl x509 -in "ssl/$VPN_CERT_FILE" -noout -subject -issuer -dates -ext subjec
 
 ### 5. `找不到账号文件 /etc/ikev2/users.txt`
 
-说明本地没有创建 `config/users.txt`，或者 `docker-compose.yml` 没有正确挂载。
+说明默认的 `config/users.txt` 缺失，或者 `docker-compose.yml` 没有正确挂载。
 
 检查：
 
@@ -573,11 +579,9 @@ ls -l config/users.txt
 docker compose config | grep users.txt
 ```
 
-重新创建：
+重新填写：
 
 ```bash
-mkdir -p config
-touch config/users.txt
 nano config/users.txt
 chmod 600 config/users.txt
 ```
@@ -669,7 +673,7 @@ PROXYARP_VPN_POOL 没有和已有设备 IP 冲突
 
 ```text
 ikev2-mschapv2: ESTABLISHED, IKEv2
-remote 'cat66.cn' @ x.x.x.x EAP: 'user1' [10.66.0.1]
+remote 'vpn.example.com' @ x.x.x.x EAP: 'user1' [10.66.0.1]
 net: INSTALLED, TUNNEL-in-UDP
 in/out packets 正常增长
 ```

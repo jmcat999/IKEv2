@@ -3,8 +3,6 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-mkdir -p ssl config
-
 if [ ! -f .env ]; then
   cp .env.example .env
   echo "已生成 .env，请先编辑 VPN_DOMAIN 和运行模式配置后重新运行。"
@@ -13,12 +11,13 @@ if [ ! -f .env ]; then
 fi
 
 if [ ! -f config/users.txt ]; then
-  touch config/users.txt
-  chmod 600 config/users.txt || true
-  echo "已创建空的 config/users.txt，请先填写 VPN 账号和密码后重新运行。"
-  echo "格式：用户名:密码，每行一个账号。"
-  echo "示例：user1:password1"
-  echo "文件路径：$(pwd)/config/users.txt"
+  echo "错误：找不到 config/users.txt，请重新克隆完整项目。"
+  exit 1
+fi
+
+if ! grep -Eq '^[^#[:space:]][^:]*:.+' config/users.txt; then
+  echo "错误：config/users.txt 还没有有效账号。"
+  echo "请按 用户名:密码 格式填写，示例见文件内注释。"
   exit 1
 fi
 
