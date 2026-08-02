@@ -5,7 +5,7 @@
 
 # certificates and private keys
 ssl/*
-!ssl/README.md
+!ssl/.gitkeep
 *.crt
 *.key
 *.pem

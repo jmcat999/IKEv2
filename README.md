@@ -66,7 +66,6 @@ VPN_MODE=proxyarp
 ```text
 /vol1/1000/docker/ikev2
 ├── ssl                # 唯一证书目录
-│   ├── README.md       # 证书放置说明
 │   ├── server.crt     # 默认 fullchain，服务器证书 + 中间证书
 │   └── server.key     # 默认私钥
 ├── config
