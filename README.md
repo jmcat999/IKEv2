@@ -1,7 +1,5 @@
 # Cat66 IKEv2 Docker
 
-正式版：`v1.2.1`
-
 这是一个基于 **Debian + strongSwan + swanctl** 的 Docker IKEv2/IPSec 服务端项目，目标是部署安卓/Windows 原生可用的：
 
 ```text
@@ -36,30 +34,17 @@ config/users.txt
 用户名:密码
 ```
 
-示例文件：
-
-```text
-config/users.example.txt
-```
-
 真实账号文件 `config/users.txt` 已经被 `.gitignore` 忽略，不要提交到 GitHub。
 
 ---
 
-## 两种独立模式
+## 两种运行模式
 
 项目支持两种互相独立的运行模式：
 
 ```text
 nat       默认模式，VPN 客户端使用独立网段，例如 10.66.0.0/24，并通过 NAT 访问内网/外网。
 proxyarp  高级模式，VPN 客户端使用局域网同网段 IP，例如 192.168.0.240/28，不做 NAT，通过 Proxy ARP 暴露给 LAN。
-```
-
-配置文件位置：
-
-```text
-config/modes/nat/swanctl.conf.template
-config/modes/proxyarp/swanctl.conf.template
 ```
 
 启动脚本会根据 `.env` 里的：
@@ -70,7 +55,7 @@ VPN_MODE=nat
 VPN_MODE=proxyarp
 ```
 
-自动选择对应模式配置。
+启动脚本根据 `VPN_MODE` 计算地址池、DNS、流量选择器和防火墙规则，并直接生成 strongSwan 运行配置。
 
 ---
 
@@ -80,24 +65,15 @@ VPN_MODE=proxyarp
 
 ```text
 /vol1/1000/docker/ikev2
-├── certs
-│   ├── cert.pem       # fullchain，服务器证书 + 中间证书
-│   └── privkey.pem    # 私钥
-├── ssl                # 可选，兼容旧文件名
-│   ├── cat66.cn.key
-│   └── cat66.cn.pem
+├── ssl                # 唯一证书目录
+│   ├── server.crt     # 默认 fullchain，服务器证书 + 中间证书
+│   └── server.key     # 默认私钥
 ├── config
-│   ├── users.txt              # 本地 VPN 账号文件，不提交 GitHub
-│   ├── users.example.txt      # 示例账号文件
-│   ├── modes
-│   │   ├── nat
-│   │   │   └── swanctl.conf.template
-│   │   └── proxyarp
-│   │       └── swanctl.conf.template
-│   ├── strongswan.conf
-│   ├── swanctl.conf.template
-│   └── start.sh
+│   └── users.txt       # 本地 VPN 账号文件，不提交 GitHub
+├── start.sh            # 容器启动和运行配置生成脚本
+├── strongswan.conf     # strongSwan 静态配置
 ├── docker-compose.yml
+├── Dockerfile
 ├── install.sh
 ├── .env.example
 └── README.md
@@ -106,13 +82,20 @@ VPN_MODE=proxyarp
 证书要求：
 
 ```text
-certs/cert.pem 必须是 fullchain
-certs/privkey.pem 必须和证书匹配
+ssl/$VPN_CERT_FILE 必须是 fullchain
+ssl/$VPN_KEY_FILE 必须和证书匹配
 证书 SAN 必须包含 VPN_DOMAIN，例如 DNS:cat66.cn
 证书 EKU 需要包含 TLS Web Server Authentication
 ```
 
-本项目启动脚本会自动把 fullchain 拆分为：
+证书文件名由 `.env` 中的 `VPN_CERT_FILE` 和 `VPN_KEY_FILE` 指定，默认是：
+
+```env
+VPN_CERT_FILE=server.crt
+VPN_KEY_FILE=server.key
+```
+
+本项目启动脚本会自动把配置的 fullchain 拆分为：
 
 ```text
 服务器证书 -> /etc/swanctl/x509/cert.pem
@@ -175,7 +158,8 @@ NAT_DNS2=8.8.8.8
 创建账号文件：
 
 ```bash
-cp config/users.example.txt config/users.txt
+mkdir -p config
+touch config/users.txt
 nano config/users.txt
 chmod 600 config/users.txt
 ```
@@ -192,15 +176,15 @@ user3:password3
 放证书：
 
 ```text
-/vol1/1000/docker/ikev2/certs/cert.pem
-/vol1/1000/docker/ikev2/certs/privkey.pem
+/vol1/1000/docker/ikev2/ssl/server.crt
+/vol1/1000/docker/ikev2/ssl/server.key
 ```
 
-如果你仍然使用旧文件名，也可以放到：
+如果证书文件名不同，只需修改 `.env`：
 
-```text
-/vol1/1000/docker/ikev2/ssl/cat66.cn.pem
-/vol1/1000/docker/ikev2/ssl/cat66.cn.key
+```env
+VPN_CERT_FILE=my-vpn.crt
+VPN_KEY_FILE=my-vpn.key
 ```
 
 启动：
@@ -447,7 +431,7 @@ docker logs -f ikev2-mschapv2
 运行模式: nat
 VPN_POOL: 10.66.0.0/24
 VPN_LOCAL_TS: 0.0.0.0/0
-VPN_USERS_FILE: /etc/cat66-ikev2/users.txt
+VPN_USERS_FILE: /etc/ikev2/users.txt
 已加载 EAP 账号数量: 3
 允许 VPN 客户端访问本机服务: 10.66.0.0/24
 证书链数量: 2
@@ -508,8 +492,7 @@ cd /vol1/1000/docker/ikev2
 git pull
 
 docker compose down
-docker compose pull
-docker compose up -d
+docker compose up -d --build
 ```
 
 ---
@@ -556,7 +539,7 @@ IPSec Xauth PSK
 
 说明镜像缺少或未加载 `eap-mschapv2` 插件。
 
-正式版镜像已安装并启用：
+本地构建的镜像会安装并启用：
 
 ```text
 libstrongswan-eap-mschapv2.so
@@ -570,16 +553,16 @@ docker exec -it ikev2-mschapv2 sh -c 'find /usr/lib /lib -name "*mschap*" 2>/dev
 
 ### 4. 连接卡在 `EAP/REQ/ID`
 
-重点检查证书链。`cert.pem` 必须是 fullchain，且脚本会拆分为服务器证书和中间证书。
+重点检查证书链。`ssl/$VPN_CERT_FILE` 必须是 fullchain，且脚本会拆分为服务器证书和中间证书。
 
 检查：
 
 ```bash
-grep -c "BEGIN CERTIFICATE" certs/cert.pem
-openssl x509 -in certs/cert.pem -noout -subject -issuer -dates -ext subjectAltName -ext extendedKeyUsage
+grep -c "BEGIN CERTIFICATE" "ssl/$VPN_CERT_FILE"
+openssl x509 -in "ssl/$VPN_CERT_FILE" -noout -subject -issuer -dates -ext subjectAltName -ext extendedKeyUsage
 ```
 
-### 5. `找不到账号文件 /etc/cat66-ikev2/users.txt`
+### 5. `找不到账号文件 /etc/ikev2/users.txt`
 
 说明本地没有创建 `config/users.txt`，或者 `docker-compose.yml` 没有正确挂载。
 
@@ -593,7 +576,8 @@ docker compose config | grep users.txt
 重新创建：
 
 ```bash
-cp config/users.example.txt config/users.txt
+mkdir -p config
+touch config/users.txt
 nano config/users.txt
 chmod 600 config/users.txt
 ```

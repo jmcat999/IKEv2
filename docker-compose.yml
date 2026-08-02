@@ -1,23 +1,15 @@
 services:
   ikev2:
-    image: ghcr.io/jmcat999/ikev2:latest
+    build: .
     container_name: ikev2-mschapv2
     restart: unless-stopped
     network_mode: host
     privileged: true
 
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-
     volumes:
       - /lib/modules:/lib/modules:ro
-      - ./certs:/certs:ro
-      - ./config/users.txt:/etc/cat66-ikev2/users.txt:ro
-      - ./config/modes:/etc/cat66-ikev2/modes:ro
-      - ./config/swanctl.conf.template:/etc/swanctl/swanctl.conf.template:ro
-      - ./config/strongswan.conf:/etc/strongswan.conf:ro
-      - ./config/start.sh:/start.sh:ro
+      - ./ssl:/ssl:ro
+      - ./config/users.txt:/etc/ikev2/users.txt:ro
 
     env_file:
       - .env

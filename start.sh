@@ -3,7 +3,11 @@ set -euo pipefail
 
 VPN_MODE="${VPN_MODE:-nat}"
 VPN_DOMAIN="${VPN_DOMAIN:?缺少 VPN_DOMAIN}"
-VPN_USERS_FILE="${VPN_USERS_FILE:-/etc/cat66-ikev2/users.txt}"
+VPN_USERS_FILE="${VPN_USERS_FILE:-/etc/ikev2/users.txt}"
+VPN_CERT_FILE="${VPN_CERT_FILE:-server.crt}"
+VPN_KEY_FILE="${VPN_KEY_FILE:-server.key}"
+VPN_CERT_PATH="/ssl/$VPN_CERT_FILE"
+VPN_KEY_PATH="/ssl/$VPN_KEY_FILE"
 
 # 从 IPv4/CIDR 或 IPv4 范围取第一个 IP。
 # 例如：192.168.0.240/28 -> 192.168.0.240
@@ -143,6 +147,58 @@ generate_eap_secrets() {
     echo "已加载 EAP 账号数量: $count" >&2
 }
 
+generate_swanctl_config() {
+    cat > /etc/swanctl/swanctl.conf <<EOF
+connections {
+    ikev2-mschapv2 {
+        version = 2
+        local_addrs = %any
+        remote_addrs = %any
+
+        send_cert = always
+        send_certreq = no
+        encap = yes
+        fragmentation = yes
+        mobike = yes
+        unique = never
+
+        pools = vpn-pool
+
+        proposals = aes256-sha256-modp4096,aes256-sha256-modp2048,aes128-sha256-modp2048
+
+        local {
+            auth = pubkey
+            certs = cert.pem
+            id = $VPN_DOMAIN
+        }
+
+        remote {
+            auth = eap-mschapv2
+            eap_id = %any
+        }
+
+        children {
+            net {
+                local_ts = $VPN_LOCAL_TS
+                esp_proposals = aes256-sha256,aes128-sha256
+                dpd_action = clear
+                start_action = none
+            }
+        }
+    }
+}
+
+pools {
+    vpn-pool {
+        addrs = $VPN_POOL
+        dns = $VPN_DNS1, $VPN_DNS2
+    }
+}
+EOF
+
+    generate_eap_secrets >> /etc/swanctl/swanctl.conf
+}
+
 case "$VPN_MODE" in
     nat)
         # NAT 模式独立配置。可以和 Proxy ARP 配置同时存在。
@@ -172,8 +228,6 @@ case "$VPN_MODE" in
         ;;
 esac
 
-export VPN_MODE VPN_DOMAIN VPN_POOL VPN_DNS1 VPN_DNS2 LAN_SUBNET VPN_LOCAL_TS
-
 modprobe xfrm_user || true
 modprobe xfrm_interface || true
 modprobe esp4 || true
@@ -186,19 +240,29 @@ mkdir -p /etc/swanctl/private
 
 rm -f /etc/swanctl/x509/*.pem /etc/swanctl/x509ca/*.pem /etc/swanctl/private/*.pem
 
-cp /certs/privkey.pem /etc/swanctl/private/privkey.pem
+if [ ! -f "$VPN_CERT_PATH" ]; then
+    echo "错误: 找不到证书 $VPN_CERT_PATH"
+    exit 1
+fi
+
+if [ ! -f "$VPN_KEY_PATH" ]; then
+    echo "错误: 找不到私钥 $VPN_KEY_PATH"
+    exit 1
+fi
+
+cp "$VPN_KEY_PATH" /etc/swanctl/private/privkey.pem
 chmod 600 /etc/swanctl/private/privkey.pem
 
-# cert.pem may be a fullchain file. swanctl expects the end-entity/server
+# The configured certificate file must be a fullchain file. swanctl expects the end-entity/server
 # certificate under x509/ and CA/intermediate certificates under x509ca/.
 # Split the PEM chain so Android/Windows clients can build the trust chain.
 awk '
   /-----BEGIN CERTIFICATE-----/ { n++; file = (n == 1 ? "/etc/swanctl/x509/cert.pem" : sprintf("/etc/swanctl/x509ca/chain-%02d.pem", n - 1)) }
   { if (n > 0) print > file }
-' /certs/cert.pem
+' "$VPN_CERT_PATH"
 
 if [ ! -s /etc/swanctl/x509/cert.pem ]; then
-    echo "错误: 未能从 /certs/cert.pem 提取服务器证书"
+    echo "错误: 未能从 $VPN_CERT_PATH 提取服务器证书"
     exit 1
 fi
 
@@ -211,25 +275,13 @@ if [ "$VPN_MODE" = "proxyarp" ]; then
     echo "LAN_SUBNET: $LAN_SUBNET"
 fi
 
-echo "证书链数量: $(grep -c 'BEGIN CERTIFICATE' /certs/cert.pem || true)"
+echo "证书文件: $VPN_CERT_PATH"
+echo "私钥文件: $VPN_KEY_PATH"
+echo "证书链数量: $(grep -c 'BEGIN CERTIFICATE' "$VPN_CERT_PATH" || true)"
 echo "服务器证书信息:"
 openssl x509 -in /etc/swanctl/x509/cert.pem -noout -subject -issuer -dates -ext subjectAltName -ext extendedKeyUsage || true
 
-MODE_TEMPLATE="/etc/cat66-ikev2/modes/$VPN_MODE/swanctl.conf.template"
-LEGACY_TEMPLATE="/etc/swanctl/swanctl.conf.template"
-
-if [ -f "$MODE_TEMPLATE" ]; then
-    echo "使用模式配置: $MODE_TEMPLATE"
-    envsubst < "$MODE_TEMPLATE" > /etc/swanctl/swanctl.conf
-elif [ -f "$LEGACY_TEMPLATE" ]; then
-    echo "警告: 未找到 $MODE_TEMPLATE，回退到旧模板 $LEGACY_TEMPLATE"
-    envsubst < "$LEGACY_TEMPLATE" > /etc/swanctl/swanctl.conf
-else
-    echo "错误: 找不到 swanctl 配置模板"
-    exit 1
-fi
-
-generate_eap_secrets >> /etc/swanctl/swanctl.conf
+generate_swanctl_config
 
 echo "关键 swanctl 配置:"
 grep -E 'send_cert|send_certreq|mobike|fragmentation|proposals|eap_id|local_ts|dns =|secrets|eap-user-' /etc/swanctl/swanctl.conf || true

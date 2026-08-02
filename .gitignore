@@ -7,15 +7,13 @@
 config/users.txt
 
 # certificates and private keys
-certs/
 ssl/
 *.key
 *.pem
 *.p12
 *.pfx
 
-# runtime data
-data/
+# runtime logs
 *.log
 
 # OS/editor

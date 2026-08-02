@@ -1,12 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-BASE_DIR="/vol1/1000/docker/ikev2"
-IMAGE_DEFAULT="ghcr.io/jmcat999/ikev2:latest"
-
 cd "$(dirname "$0")"
 
-mkdir -p ssl certs data config
+mkdir -p ssl config
 
 if [ ! -f .env ]; then
   cp .env.example .env
@@ -16,44 +13,38 @@ if [ ! -f .env ]; then
 fi
 
 if [ ! -f config/users.txt ]; then
-  if [ -f config/users.example.txt ]; then
-    cp config/users.example.txt config/users.txt
-  else
-    cat > config/users.txt <<'EOF'
-user1:password1
-user2:password2
-user3:password3
-EOF
-  fi
+  touch config/users.txt
   chmod 600 config/users.txt || true
-  echo "已生成 config/users.txt，请先填写 VPN 账号和密码后重新运行。"
+  echo "已创建空的 config/users.txt，请先填写 VPN 账号和密码后重新运行。"
   echo "格式：用户名:密码，每行一个账号。"
   echo "示例：user1:password1"
   echo "文件路径：$(pwd)/config/users.txt"
   exit 1
 fi
 
-if [ -f ssl/cat66.cn.pem ] && [ ! -f certs/cert.pem ]; then
-  cp ssl/cat66.cn.pem certs/cert.pem
-fi
+read_env_value() {
+  local key="$1"
+  awk -F= -v key="$key" '$1 == key { sub(/^[^=]*=/, ""); sub(/\r$/, ""); print; exit }' .env
+}
 
-if [ -f ssl/cat66.cn.key ] && [ ! -f certs/privkey.pem ]; then
-  cp ssl/cat66.cn.key certs/privkey.pem
-fi
+VPN_CERT_FILE="${VPN_CERT_FILE:-$(read_env_value VPN_CERT_FILE)}"
+VPN_KEY_FILE="${VPN_KEY_FILE:-$(read_env_value VPN_KEY_FILE)}"
+VPN_CERT_FILE="${VPN_CERT_FILE:-server.crt}"
+VPN_KEY_FILE="${VPN_KEY_FILE:-server.key}"
 
-if [ ! -f certs/cert.pem ]; then
-  echo "错误：找不到证书 certs/cert.pem"
-  echo "你可以把 cat66.cn.pem 放到 ssl/cat66.cn.pem，脚本会自动复制。"
+if [ ! -f "ssl/$VPN_CERT_FILE" ]; then
+  echo "错误：找不到证书 ssl/$VPN_CERT_FILE"
+  echo "请把完整证书链放到 ssl/ 目录，并在 .env 中设置 VPN_CERT_FILE。"
   exit 1
 fi
 
-if [ ! -f certs/privkey.pem ]; then
-  echo "错误：找不到私钥 certs/privkey.pem"
-  echo "你可以把 cat66.cn.key 放到 ssl/cat66.cn.key，脚本会自动复制。"
+if [ ! -f "ssl/$VPN_KEY_FILE" ]; then
+  echo "错误：找不到私钥 ssl/$VPN_KEY_FILE"
+  echo "请把私钥放到 ssl/ 目录，并在 .env 中设置 VPN_KEY_FILE。"
   exit 1
 fi
 
-chmod 600 certs/privkey.pem || true
+chmod 600 "ssl/$VPN_KEY_FILE" || true
 chmod 600 config/users.txt || true
 
 echo "加载宿主机 IPsec/XFRM 模块..."
@@ -73,17 +64,13 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
-if docker compose version >/dev/null 2>&1; then
-  COMPOSE="docker compose"
-elif command -v docker-compose >/dev/null 2>&1; then
-  COMPOSE="docker-compose"
-else
+if ! docker compose version >/dev/null 2>&1; then
   echo "错误：找不到 docker compose。"
   exit 1
 fi
 
 echo "启动 IKEv2/IPSec MSCHAPv2 容器..."
-$COMPOSE up -d --build
+docker compose up -d --build
 
 echo ""
 echo "部署完成。"

@@ -11,7 +11,7 @@
   - `192.168.0.240/28`
 - 支持 `PROXYARP_VPN_POOL` 使用 IP 范围：
   - `192.168.0.180-192.168.0.200`
-- 修复 Docker Compose 本地部署时没有挂载 `config/modes` 的问题。
+- 由 `start.sh` 根据运行模式直接生成 strongSwan 配置。
 - 修复 IP 范围地址池无法写入 iptables 规则的问题。
 - NAT 和 Proxy ARP 两套配置可以同时存在，只通过 `VPN_MODE` 选择当前运行模式。
 - 支持不同模式独立配置 DNS：
@@ -59,10 +59,7 @@ PROXYARP_VPN_POOL=192.168.0.180-192.168.0.200
 
 - 新增 `VPN_MODE=nat` 默认模式。
 - 新增 `VPN_MODE=proxyarp` 高级同网段模式。
-- 新增独立配置目录：
-  - `config/modes/nat/swanctl.conf.template`
-  - `config/modes/proxyarp/swanctl.conf.template`
-- `start.sh` 会根据 `VPN_MODE` 自动选择对应配置。
+- `start.sh` 根据 `VPN_MODE` 直接生成对应运行配置。
 - NAT 模式自动启用 MASQUERADE。
 - Proxy ARP 模式不做 MASQUERADE，并开启 Proxy ARP。
 - 新增 `LAN_SUBNET` 和 `VPN_LOCAL_TS` 环境变量。
@@ -91,7 +88,7 @@ PROXYARP_VPN_POOL=192.168.0.180-192.168.0.200
 
 - 安装并启用 `eap-mschapv2` 插件。
 - 支持 Android/Windows 常见 IKE proposal。
-- 支持 MODP 4096/2048，并保留 MODP 1024 兼容项。
+- IKE 仅使用 SHA-256 与 MODP 4096/2048，ESP 仅使用 AES 与 SHA-256。
 - `send_cert = always`，服务端主动发送证书。
 - `send_certreq = no`，不向客户端发送证书请求。
 - 自动拆分 fullchain：
@@ -104,5 +101,5 @@ PROXYARP_VPN_POOL=192.168.0.180-192.168.0.200
 - 宿主机必须支持 XFRM/IPsec。
 - Docker 容器必须使用 host network。
 - Docker 容器必须使用 privileged。
-- `certs/cert.pem` 必须是 fullchain。
-- `certs/privkey.pem` 必须与证书匹配。
+- `ssl/$VPN_CERT_FILE` 必须是 fullchain。
+- `ssl/$VPN_KEY_FILE` 必须与证书匹配。
