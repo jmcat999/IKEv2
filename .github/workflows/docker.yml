@@ -1,4 +1,4 @@
-name: Build Development Image
+name: Build Docker Image
 
 on:
   push:
@@ -34,7 +34,7 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/ikev2
           tags: |
-            type=raw,value=dev
+            type=raw,value=latest
             type=sha
 
       - name: Build and push

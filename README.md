@@ -138,6 +138,8 @@ git clone https://github.com/jmcat999/IKEv2.git .
 
 克隆完成后，仓库已经包含 `ssl/` 目录和带注释示例的 `config/users.txt`，不需要手动创建目录或文件。
 
+容器镜像由 GitHub Actions 构建并发布为 `ghcr.io/jmcat999/ikev2:latest`。部署机只会拉取镜像，不会在本地执行 Dockerfile 构建。
+
 复制并编辑 `.env`：
 
 ```bash
@@ -494,7 +496,8 @@ cd /vol1/1000/docker/ikev2
 git pull
 
 docker compose down
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 ---
@@ -541,7 +544,7 @@ IPSec Xauth PSK
 
 说明镜像缺少或未加载 `eap-mschapv2` 插件。
 
-本地构建的镜像会安装并启用：
+GitHub 发布的镜像会安装并启用：
 
 ```text
 libstrongswan-eap-mschapv2.so

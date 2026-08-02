@@ -68,8 +68,9 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "启动 IKEv2/IPSec MSCHAPv2 容器..."
-docker compose up -d --build
+echo "拉取并启动 IKEv2/IPSec MSCHAPv2 容器..."
+docker compose pull
+docker compose up -d
 
 echo ""
 echo "部署完成。"

@@ -1,6 +1,7 @@
 services:
   ikev2:
-    build: .
+    image: ghcr.io/jmcat999/ikev2:latest
+    pull_policy: always
     container_name: ikev2-mschapv2
     restart: unless-stopped
     network_mode: host
