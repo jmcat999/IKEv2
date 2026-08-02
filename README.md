@@ -136,7 +136,7 @@ cd /vol1/1000/docker/ikev2
 git clone https://github.com/jmcat999/IKEv2.git .
 ```
 
-克隆完成后，仓库已经包含 `ssl/` 目录和带注释示例的 `config/users.txt`，不需要手动创建目录或文件。
+克隆完成后，仓库已经包含带注释示例的 `config/users.txt`。
 
 容器镜像由 GitHub Actions 构建并发布为 `ghcr.io/jmcat999/ikev2:latest`。部署机只会拉取镜像，不会在本地执行 Dockerfile 构建。
 
@@ -178,6 +178,10 @@ user3:password3
 ```
 
 放证书：
+
+```bash
+mkdir -p ssl
+```
 
 ```text
 /vol1/1000/docker/ikev2/ssl/server.crt

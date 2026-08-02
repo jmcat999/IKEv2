@@ -4,8 +4,7 @@
 !.env.example
 
 # certificates and private keys
-ssl/*
-!ssl/.gitkeep
+ssl/
 *.crt
 *.key
 *.pem
