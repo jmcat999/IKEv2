@@ -384,42 +384,23 @@ IPSec 标识符：vpn.example.com
 
 ## Windows 配置
 
-建议用管理员 PowerShell 创建：
+使用 Windows 系统自带的 VPN 客户端，不需要修改注册表，也不需要运行 PowerShell 设置算法。
 
-```powershell
-$Name = "IKEv2 VPN"
-$Server = "vpn.example.com"
+打开“设置 → 网络和 Internet → VPN → 添加 VPN”，填写：
 
-Remove-VpnConnection -Name $Name -Force -ErrorAction SilentlyContinue
-
-$Eap = New-EapConfiguration
-
-Add-VpnConnection `
-  -Name $Name `
-  -ServerAddress $Server `
-  -TunnelType Ikev2 `
-  -AuthenticationMethod Eap `
-  -EapConfigXmlStream $Eap.EapConfigXmlStream `
-  -EncryptionLevel Required `
-  -RememberCredential `
-  -Force `
-  -PassThru
+```text
+VPN 提供商：Windows（内置）
+连接名称：IKEv2 VPN
+服务器名称或地址：vpn.example.com
+VPN 类型：IKEv2
+登录信息的类型：用户名和密码
+用户名：config/users.txt 里的用户名
+密码：config/users.txt 对应用户的密码
 ```
 
-可选：指定 IKEv2 算法：
+服务端会优先协商 AES/SHA-256/MODP2048 或更强算法，并保留 Windows 10/11 原生 IKEv2 默认算法所需的回退提案。
 
-```powershell
-Set-VpnConnectionIPsecConfiguration `
-  -ConnectionName "IKEv2 VPN" `
-  -AuthenticationTransformConstants SHA256128 `
-  -CipherTransformConstants AES256 `
-  -EncryptionMethod AES256 `
-  -IntegrityCheckMethod SHA256 `
-  -PfsGroup None `
-  -DHGroup Group14 `
-  -Force `
-  -PassThru
-```
+参考：[Microsoft Windows IKEv2 默认加密设置](https://learn.microsoft.com/windows/security/operating-system-security/network-security/vpn/how-to-configure-diffie-hellman-protocol-over-ikev2-vpn-connections)、[strongSwan Windows 客户端互操作文档](https://docs.strongswan.org/docs/latest/interop/windowsClients.html)。
 
 ---
 

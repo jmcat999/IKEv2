@@ -164,7 +164,7 @@ connections {
 
         pools = vpn-pool
 
-        proposals = aes256-sha256-modp4096,aes256-sha256-modp2048,aes128-sha256-modp2048
+        proposals = aes256-sha256-modp4096,aes256-sha256-modp2048,aes128-sha256-modp2048,aes256-sha256-modp1024,aes256-sha1-modp1024,aes128-sha1-modp1024,3des-sha1-modp1024
 
         local {
             auth = pubkey
@@ -180,7 +180,7 @@ connections {
         children {
             net {
                 local_ts = $VPN_LOCAL_TS
-                esp_proposals = aes256-sha256,aes128-sha256
+                esp_proposals = aes256-sha256,aes128-sha256,aes256-sha1,aes128-sha1,3des-sha1
                 dpd_action = clear
                 start_action = none
             }
