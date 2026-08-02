@@ -160,9 +160,6 @@ NAT_DNS2=8.8.8.8
 填写账号文件：
 
 ```bash
-# 在部署机器上隐藏本地账号改动，避免误提交明文密码
-git update-index --skip-worktree config/users.txt
-
 nano config/users.txt
 chmod 600 config/users.txt
 ```
